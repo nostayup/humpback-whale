@@ -72,7 +72,7 @@ else:
         p2size[p] = size
 
 
-#一种计算两个图片相似程度的算法
+#计算两个图片相似程度
 def match(h1, h2):
     for p1 in h2ps[h1]:
         for p2 in h2ps[h2]:
@@ -95,7 +95,6 @@ if isfile(P2H):
     with open(P2H, 'rb') as f:
         p2h = pickle.load(f)
 else:
-    # Compute phash for each image in the training and test set.
     #phash()一种可用于比较图片相似度的哈希算法，将图片先缩小为64像素，计算像素平均值，
     #每个像素与平均值比较，大于就是1小于就是0,这一串数字就代表了每个图片，比较不同图片
     #的这串数字相接近程度。这个循环需要7分钟
@@ -105,9 +104,8 @@ else:
         h = phash(img)
         p2h[p] = h
 
-    # Find all images associated with a given phash value.
     #本循环的作用就是如果是同一个哈希密码，图像编号放到一块，筛出重复的图像
-    #这个字典结构：{哈希密码：数组[图像编号1,图像编号2,……]}
+    #字典结构：{哈希密码：数组[图像编号1,图像编号2,……]}
     h2ps = {}
     for p, h in p2h.items():
         if h not in h2ps: h2ps[h] = []
@@ -116,11 +114,8 @@ else:
     # Find all distinct phash values
     hs = list(h2ps.keys())
 
-    #If the images are close enough, associate the two phash values
-    #(this is the slow part: n^2 algorithm)
-    #这个是比较哈希密码之间的相似的进一步裁剪
     h2h = {}
-    for i, h1 in enumerate(tqdm(hs)):  #i是循环的编号，不是hs的内容
+    for i, h1 in enumerate(tqdm(hs)): 
         for h2 in hs[:i]:
             if h1 - h2 <= 6 and match(h1, h2):
                 s1 = str(h1)
@@ -128,28 +123,23 @@ else:
                 if s1 < s2: s1, s2 = s2, s1
                 h2h[s1] = s2
 
-    # Group together images with equivalent phash, and replace by string format of phash (faster and more readable)
-    #将同一个图片相关的哈希值都放到图片后面的value
     for p, h in p2h.items():
         h = str(h)
         if h in h2h: h = h2h[h]
         p2h[p] = h
-#with open(P2H, 'wb') as f:
-#pickle.dump(p2h, f)
-#For each image id, determine the list of pictures
+
 h2ps = {}
 for p, h in p2h.items():
     if h not in h2ps: h2ps[h] = []
     if p not in h2ps[h]: h2ps[h].append(p)
 
-#这个暂时没用？？？？？？？？？？
-def show_whale(imgs, per_row=2):
-    n = len(imgs)
-    rows = (n + per_row - 1) // per_row
-    cols = min(per_row, n)
-    fig, axes = plt.subplots(rows, cols, figsize=(24 // per_row * cols, 24 // per_row * rows))
-    for ax in axes.flatten(): ax.axis('off')
-    for i, (img, ax) in enumerate(zip(imgs, axes.flatten())): ax.imshow(img.convert('RGB'))
+#def show_whale(imgs, per_row=2):
+#    n = len(imgs)
+#    rows = (n + per_row - 1) // per_row
+#    cols = min(per_row, n)
+#    fig, axes = plt.subplots(rows, cols, figsize=(24 // per_row * cols, 24 // per_row * rows))
+#    for ax in axes.flatten(): ax.axis('off')
+#    for i, (img, ax) in enumerate(zip(imgs, axes.flatten())): ax.imshow(img.convert('RGB'))
         
 
 def read_raw_image(p):
@@ -157,7 +147,6 @@ def read_raw_image(p):
     return img
 
 
-# For each images id, select the prefered image
 def prefer(ps):
     if len(ps) == 1: return ps[0]
     best_p = ps[0]
@@ -176,13 +165,12 @@ for h, ps in h2ps.items():
     h2p[h] = prefer(ps)
 len(h2p), list(h2p.items())[:5]
 
-# Read the bounding box data from the bounding box kernel (see reference above)
 p2bb = pd.read_csv(BB_DF).set_index("Image")
 
 #重新定义一下报错输出,对linux系统没用
-old_stderr = sys.stderr
-sys.stderr = open('/dev/null' if platform.system() != 'Windows' else 'nul', 'w')
-sys.stderr = old_stderr
+#old_stderr = sys.stderr
+#sys.stderr = open('/dev/null' if platform.system() != 'Windows' else 'nul', 'w')
+#sys.stderr = old_stderr
 
 img_shape = (384, 384, 3)  # The image shape used by the model
 anisotropy = 2.15  # The horizontal compression ratio
@@ -190,7 +178,6 @@ crop_margin = 0.05  # The margin added around the bounding box to compensate for
 
 def build_transform(rotation, shear, height_zoom, width_zoom, height_shift, width_shift):
     """
-    Build a transformation matrix with the specified characteristics.
     二维的旋转平移缩放矩阵需要一个三维矩阵，[x,y,1]去计算
     """
     rotation = np.deg2rad(rotation)#旋转
@@ -241,7 +228,7 @@ def read_cropped_image(p, augment):
     
     dx = x1 - x0
     dy = y1 - y0
-    #这是为了保证鲸鱼尾巴的长宽比都比较接近anisotropy这个比值
+    #为了保证鲸鱼尾巴的长宽比都比较接近anisotropy这个比值
     if dx > dy * anisotropy:
         dy = 0.5 * (dx / anisotropy - dy)
         y0 -= dy
@@ -251,7 +238,6 @@ def read_cropped_image(p, augment):
         x0 -= dx
         x1 += dx
 
-    # Generate the transformation matrix
     trans = np.array([[1, 0, -0.5 * img_shape[0]],   #平移,将图片中心置于坐标原点方便后续处理
                       [0, 1, -0.5 * img_shape[1]], 
                       [0, 0, 1                    ]])
@@ -271,7 +257,6 @@ def read_cropped_image(p, augment):
                              [0, 1, 0.5 * (x1 + x0)], 
                              [0, 0, 1]]),              trans)
 
-    # Read the image, transform to black and white and comvert to numpy array
     img_ori = read_raw_image(p)
     img_ori = img_to_array(img_ori)
 
@@ -292,22 +277,15 @@ def read_cropped_image(p, augment):
         img[:,:,1] = img[:,:,0]
         img[:,:,2] = img[:,:,0]
 
-    # Normalize to zero mean and unit variance
     img -= np.mean(img, keepdims=True)
     img /= np.std(img, keepdims=True) + K.epsilon()
     return img
 
 def read_for_training(p):
-    """
-    Read and preprocess an image with data augmentation (random transform).
-    """
     return read_cropped_image(p, True)
 
 
 def read_for_validation(p):
-    """
-    Read and preprocess an image without data augmentation (use for testing).
-    """
     return read_cropped_image(p, False)
 
 
@@ -315,14 +293,14 @@ def subblock(x, filters, **kwargs):
     y = x
     y = BatchNormalization()(y)   
     y = Activation('relu')(y)
-    y = Conv2D(filters, (1, 1),  **kwargs)(y)  # Reduce the number of features to 'filter'
+    y = Conv2D(filters, (1, 1),  **kwargs)(y) 
     
     y = BatchNormalization()(y)
     y = Activation('relu')(y)
-    y = Conv2D(filters, (3, 3),  **kwargs)(y)  # Extend the feature field
+    y = Conv2D(filters, (3, 3),  **kwargs)(y) 
     
-    y = Conv2D(K.int_shape(x)[-1], (1, 1), **kwargs)(y)  # no activation # Restore the number of original features
-    y = Add()([x, y])  # Add the bypass connection
+    y = Conv2D(K.int_shape(x)[-1], (1, 1), **kwargs)(y)  
+    y = Add()([x, y])  
 
     return y
 def build_model(lr, l2, activation='sigmoid'):
@@ -387,15 +365,12 @@ def build_model(lr, l2, activation='sigmoid'):
     x = Conv2D(1, (1, mid), activation='linear', padding='valid')(x)
     x = Flatten(name='flatten')(x)
 
-    # Weighted sum implemented as a Dense layer.
     x = Dense(1, use_bias=True, activation=activation, name='weighted-average')(x)
     head_model = Model([xa_inp, xb_inp], x, name='head')
 
     ########################
     # SIAMESE NEURAL NETWORK
     ########################
-    # Complete model is constructed by calling the branch model on each input image,
-    # and then the head model on the resulting 512-vectors.
     img_a = Input(shape=img_shape)
     img_b = Input(shape=img_shape)
     xa = branch_model(img_a)
@@ -412,7 +387,7 @@ model, branch_model, head_model = build_model(64e-5, 0.0002)
 h2ws = {}    #储存同一个哈希值对应的鲸鱼名字，一一对应
 new_whale = 'new_whale'
 for p, w in tqdm(tagged.items()):
-    if w != new_whale:  # Use only identified whales
+    if w != new_whale:  
         h = p2h[p]
         if h not in h2ws: h2ws[h] = []
         if w not in h2ws[h]: h2ws[h].append(w)  #把鲸的编号与哈希码对应起来
@@ -420,11 +395,10 @@ for h, ws in h2ws.items():
     if len(ws) > 1:
         h2ws[h] = sorted(ws)
 
-# For each whale, find the unambiguous images ids.
-#因为一个鲸鱼名字可能对应好几个哈希值，所以这个是一对多。
+#因为一个鲸鱼名字可能对应好几个哈希值，所以需要一对多。
 w2hs = {}
 for h, ws in h2ws.items():
-    if len(ws) == 1:  # Use only unambiguous pictures
+    if len(ws) == 1: 
         w = ws[0]
         if w not in w2hs: w2hs[w] = []
         if h not in w2hs[w]: w2hs[w].append(h)
